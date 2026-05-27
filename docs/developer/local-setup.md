@@ -62,7 +62,7 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/memory_platform REDIS
 ```bash
 cd services/api-gateway
 pnpm build
-JWT_SECRET=dev-secret-123 PORT=3001 INGESTION_SERVICE_URL=http://localhost:3002 RETRIEVAL_SERVICE_URL=http://localhost:3005 node dist/start.js
+JWT_SECRET=<your-jwt-secret> PORT=3001 INGESTION_SERVICE_URL=http://localhost:3002 RETRIEVAL_SERVICE_URL=http://localhost:3005 node dist/start.js
 ```
 
 ## 5) Run Frontend
@@ -77,7 +77,7 @@ cd apps/developer-console && pnpm dev -p 3100
 ```bash
 curl http://localhost:3001/health
 curl -X POST http://localhost:3001/v1/documents \
-  -H "x-api-key: ak_workspace123abc_randomstring1234567890" \
+  -H "x-api-key: ak_<workspace_id>_<token>" \
   -H "Content-Type: application/json" \
   -d '{"title":"Doc","source":{"type":"api","content":"hello"}}'
 ```

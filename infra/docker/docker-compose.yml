@@ -197,7 +197,7 @@ services:
     environment:
       NODE_ENV: development
       PORT: "3001"
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:-replace-me-before-production}
       INGESTION_SERVICE_URL: http://ingestion-service:3002
       RETRIEVAL_SERVICE_URL: http://retrieval-service:3005
       CONNECTOR_SERVICE_URL: http://connector-service:3008

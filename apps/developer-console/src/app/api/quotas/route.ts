@@ -3,8 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 // Try to fetch from real DB via API Gateway. Falls back to mock.
 async function getRealQuotas() {
   try {
+    const apiKey = process.env.CONSOLE_API_KEY;
+    if (!apiKey) throw new Error("CONSOLE_API_KEY missing");
     const res = await fetch("http://localhost:3001/v1/usage", {
-      headers: { "x-api-key": "ak_workspace123abc_randomstring1234567890" },
+      headers: { "x-api-key": apiKey },
       signal: AbortSignal.timeout(3000),
     });
     const usage = await res.json();

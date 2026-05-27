@@ -6,10 +6,15 @@
 import { initApiGateway } from "./index.js";
 
 const port = parseInt(process.env.PORT ?? "3001", 10);
+const jwtSecret = process.env.JWT_SECRET;
+
+if (!jwtSecret) {
+  throw new Error("JWT_SECRET is required to start API Gateway");
+}
 
 const app = initApiGateway({
   auth: {
-    jwtSecret: process.env.JWT_SECRET ?? "change-me-in-production",
+    jwtSecret,
     jwtAudience: process.env.JWT_AUDIENCE,
     jwtIssuer: process.env.JWT_ISSUER,
   },

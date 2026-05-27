@@ -33,7 +33,7 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/memory_platform REDIS
 
 # Terminal 4 - API Gateway
 cd services/api-gateway && pnpm build
-JWT_SECRET=dev-secret-123 PORT=3001 INGESTION_SERVICE_URL=http://localhost:3002 RETRIEVAL_SERVICE_URL=http://localhost:3005 node dist/start.js
+JWT_SECRET=<your-jwt-secret> PORT=3001 INGESTION_SERVICE_URL=http://localhost:3002 RETRIEVAL_SERVICE_URL=http://localhost:3005 node dist/start.js
 ```
 
 Atau pakai script:
@@ -51,18 +51,18 @@ curl http://localhost:3001/health
 # Upload document
 curl -X POST http://localhost:3001/v1/documents \
   -H "Content-Type: application/json" \
-  -H "x-api-key: ak_workspace123abc_randomstring1234567890" \
+  -H "x-api-key: ak_<workspace_id>_<token>" \
   -d '{"title":"My Document","source":{"type":"api","content":"Document content here"},"tags":["tag1"]}'
 
 # Search
 curl -X POST http://localhost:3001/v1/search \
   -H "Content-Type: application/json" \
-  -H "x-api-key: ak_workspace123abc_randomstring1234567890" \
+  -H "x-api-key: ak_<workspace_id>_<token>" \
   -d '{"query":"your search query","top_k":5}'
 
 # Usage stats
 curl http://localhost:3001/v1/usage \
-  -H "x-api-key: ak_workspace123abc_randomstring1234567890"
+  -H "x-api-key: ak_<workspace_id>_<token>"
 ```
 
 ## Arsitektur

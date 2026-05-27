@@ -4,8 +4,10 @@ const DB_URL = process.env.DATABASE_URL || "postgresql://postgres:postgres@local
 
 export async function GET() {
   try {
+    const apiKey = process.env.CONSOLE_API_KEY;
+    if (!apiKey) throw new Error("CONSOLE_API_KEY missing");
     const res = await fetch("http://localhost:3001/v1/usage", {
-      headers: { "x-api-key": "ak_workspace123abc_randomstring1234567890" },
+      headers: { "x-api-key": apiKey },
     });
     const usage = await res.json();
 

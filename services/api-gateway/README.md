@@ -6,7 +6,7 @@ Single entry point for all public API traffic. Handles auth (JWT + API key), rat
 
 ```bash
 pnpm build
-JWT_SECRET=dev-secret-123 PORT=3001 \
+JWT_SECRET=<your-jwt-secret> PORT=3001 \
   INGESTION_SERVICE_URL=http://localhost:3002 \
   RETRIEVAL_SERVICE_URL=http://localhost:3005 \
   node dist/start.js
@@ -44,7 +44,7 @@ ak_<workspace_id>_<random>
 sk_<workspace_id>_<random>
 ```
 
-Example dev key: `ak_workspace123abc_randomstring1234567890`
+Example key format: `ak_<workspace_id>_<token>`
 
 ## Database
 

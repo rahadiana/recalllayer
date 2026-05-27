@@ -17,7 +17,7 @@ Use API key sign-in (MVP auth model).
 Example dev key:
 
 ```txt
-ak_workspace123abc_randomstring1234567890
+ak_<workspace_id>_<token>
 ```
 
 ## Core Workflow

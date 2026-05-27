@@ -31,7 +31,7 @@ export default function DocsPage() {
         <h3 className="font-semibold text-brand-800 mb-2">Quick Test</h3>
         <pre className="text-xs bg-brand-100 p-3 rounded overflow-x-auto">
 {`curl -X POST http://localhost:3001/v1/documents \\
-  -H "x-api-key: ak_workspace123abc_randomstring1234567890" \\
+  -H "x-api-key: ak_<workspace_id>_<token>" \\
   -H "Content-Type: application/json" \\
   -d '{"title":"Doc","source":{"type":"api","content":"..."}}'`}
         </pre>

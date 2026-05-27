@@ -65,7 +65,7 @@ export default function LoginPage() {
         </form>
 
         <p className="text-xs text-surface-400 text-center mt-4">
-          Dev key: <code className="bg-surface-100 px-1 rounded">ak_workspace123abc_randomstring1234567890</code>
+          Use your workspace API key (`ak_&lt;workspace_id&gt;_&lt;token&gt;`).
         </p>
       </div>
     </div>
