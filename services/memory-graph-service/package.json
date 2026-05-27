@@ -1,0 +1,32 @@
+{
+  "name": "@memory-platform/memory-graph-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@memory-platform/shared-schemas": "workspace:*",
+    "@memory-platform/shared-utils": "workspace:*",
+    "@memory-platform/observability": "workspace:*",
+    "@memory-platform/db": "workspace:*",
+    "@memory-platform/queue": "workspace:*",
+    "@memory-platform/llm": "workspace:*",
+    "express": "^5.1.0",
+    "ioredis": "^5.4.0",
+    "neo4j-driver": "^5.27.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0",
+    "@types/node": "^22.0.0",
+    "@types/express": "^5.0.0",
+    "supertest": "^7.0.0",
+    "@types/supertest": "^6.0.0"
+  }
+}

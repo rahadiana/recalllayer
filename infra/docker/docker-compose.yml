@@ -1,0 +1,531 @@
+# =============================================================================
+# Agentic Memory Platform — Local Development Stack
+# =============================================================================
+#
+# Usage:
+#   docker compose up -d                  Start all services
+#   docker compose up -d postgres redis   Start specific services
+#   docker compose up -d --build          Rebuild and start
+#   docker compose down -v                Stop and remove volumes (full reset)
+#
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16 — Primary relational database
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: memory-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-memory_platform}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-memory_platform}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - memory-platform-net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ---------------------------------------------------------------------------
+  # Redis 7 — Cache, session store, and message broker
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: memory-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - memory-platform-net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # ---------------------------------------------------------------------------
+  # Qdrant — Vector database for embeddings and similarity search
+  # ---------------------------------------------------------------------------
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: memory-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"   # REST API + Web UI
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: "6334"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - memory-platform-net
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  # ---------------------------------------------------------------------------
+  # MinIO — S3-compatible object storage
+  # ---------------------------------------------------------------------------
+  minio:
+    image: minio/minio:latest
+    container_name: memory-minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web Console
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - memory-platform-net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ---------------------------------------------------------------------------
+  # OpenTelemetry Collector — Observability pipeline
+  # ---------------------------------------------------------------------------
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: memory-otel
+    restart: unless-stopped
+    ports:
+      - "4318:4318"   # OTLP HTTP receiver
+    volumes:
+      - ./otel-collector-config.yml:/etc/otelcol-contrib/config.yaml:ro
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:13133/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - memory-platform-net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # ---------------------------------------------------------------------------
+  # Neo4j — Graph database for memory-graph service
+  # ---------------------------------------------------------------------------
+  neo4j:
+    image: neo4j:5-community
+    container_name: memory-neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474"   # HTTP / Neo4j Browser
+      - "7687:7687"   # Bolt protocol
+    environment:
+      NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/neo4jpassword}
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_memory_heap_initial__size: 512m
+      NEO4J_dbms_memory_heap_max__size: 1G
+      NEO4J_dbms_memory_pagecache_size: 512m
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7474"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - memory-platform-net
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  # ===========================================================================
+  # Backend Services
+  # ===========================================================================
+
+  # ---------------------------------------------------------------------------
+  # API Gateway — Public API entry point (port 3001)
+  # ---------------------------------------------------------------------------
+  api-gateway:
+    build:
+      context: ../..
+      dockerfile: services/api-gateway/Dockerfile
+    container_name: memory-api-gateway
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    env_file:
+      - ../../services/api-gateway/.env
+    environment:
+      NODE_ENV: development
+      PORT: "3001"
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      INGESTION_SERVICE_URL: http://ingestion-service:3002
+      RETRIEVAL_SERVICE_URL: http://retrieval-service:3005
+      CONNECTOR_SERVICE_URL: http://connector-service:3008
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    volumes:
+      - ../../services/api-gateway/src:/app/src:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - memory-platform-net
+
+  # ---------------------------------------------------------------------------
+  # Ingestion Service — Document ingestion API (port 3002)
+  # ---------------------------------------------------------------------------
+  ingestion-service:
+    build:
+      context: ../..
+      dockerfile: services/ingestion-service/Dockerfile
+    container_name: memory-ingestion
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    env_file:
+      - ../../services/ingestion-service/.env
+    environment:
+      NODE_ENV: development
+      PORT: "3002"
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/memory_platform
+      REDIS_URL: redis://redis:6379
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    volumes:
+      - ../../services/ingestion-service/src:/app/src:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3002/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - memory-platform-net
+
+  # ---------------------------------------------------------------------------
+  # Extraction Service — Document extraction worker (port 3003)
+  # ---------------------------------------------------------------------------
+  extraction-service:
+    build:
+      context: ../..
+      dockerfile: services/extraction-service/Dockerfile
+    container_name: memory-extraction
+    restart: unless-stopped
+    ports:
+      - "3003:3003"
+    env_file:
+      - ../../services/extraction-service/.env
+    environment:
+      NODE_ENV: development
+      POSTGRES_URL: postgresql://postgres:postgres@postgres:5432/memory_platform
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/memory_platform
+      REDIS_URL: redis://redis:6379
+      QUEUE_PREFIX: extraction
+      EXTRACTION_CONCURRENCY: "3"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    volumes:
+      - ../../services/extraction-service/src:/app/src:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - memory-platform-net
+
+  # ---------------------------------------------------------------------------
+  # Indexing Service — Chunking, embedding, and vector indexing (port 3004)
+  # ---------------------------------------------------------------------------
+  indexing-service:
+    build:
+      context: ../..
+      dockerfile: services/indexing-service/Dockerfile
+    container_name: memory-indexing
+    restart: unless-stopped
+    ports:
+      - "3004:3004"
+    env_file:
+      - ../../services/indexing-service/.env
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/memory_platform
+      REDIS_URL: redis://redis:6379
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    volumes:
+      - ../../services/indexing-service/src:/app/src:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    networks:
+      - memory-platform-net
+
+  # ---------------------------------------------------------------------------
+  # Retrieval Service — Hybrid search and RAG context (port 3005)
+  # ---------------------------------------------------------------------------
+  retrieval-service:
+    build:
+      context: ../..
+      dockerfile: services/retrieval-service/Dockerfile
+    container_name: memory-retrieval
+    restart: unless-stopped
+    ports:
+      - "3005:3005"
+    env_file:
+      - ../../services/retrieval-service/.env
+    environment:
+      NODE_ENV: development
+      PORT: "3005"
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/memory_platform
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    volumes:
+      - ../../services/retrieval-service/src:/app/src:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3005/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - memory-platform-net
+
+  # ---------------------------------------------------------------------------
+  # Memory Graph Service — Entity/relation extraction and graph storage (port 3006)
+  # ---------------------------------------------------------------------------
+  memory-graph-service:
+    build:
+      context: ../..
+      dockerfile: services/memory-graph-service/Dockerfile
+    container_name: memory-graph
+    restart: unless-stopped
+    ports:
+      - "3006:3006"
+    env_file:
+      - ../../services/memory-graph-service/.env
+    environment:
+      NODE_ENV: development
+      PORT: "3006"
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/memory_platform
+      POSTGRES_URL: postgresql://postgres:postgres@postgres:5432/memory_platform
+      REDIS_URL: redis://redis:6379
+      NEO4J_URL: bolt://neo4j:7687
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-neo4jpassword}
+      QUEUE_PREFIX: memory-graph
+      GRAPH_CONCURRENCY: "3"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    volumes:
+      - ../../services/memory-graph-service/src:/app/src:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3006/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - memory-platform-net
+
+  # ---------------------------------------------------------------------------
+  # Profile Memory Service — User preference and personalization (port 3007)
+  # ---------------------------------------------------------------------------
+  profile-memory-service:
+    build:
+      context: ../..
+      dockerfile: services/profile-memory-service/Dockerfile
+    container_name: memory-profile
+    restart: unless-stopped
+    ports:
+      - "3007:3007"
+    env_file:
+      - ../../services/profile-memory-service/.env
+    environment:
+      NODE_ENV: development
+      PORT: "3007"
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/memory_platform
+      REDIS_URL: redis://redis:6379
+      QUEUE_PREFIX: profile
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    volumes:
+      - ../../services/profile-memory-service/src:/app/src:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3007/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - memory-platform-net
+
+  # ---------------------------------------------------------------------------
+  # Connector Service — External data source integrations (port 3008)
+  # ---------------------------------------------------------------------------
+  connector-service:
+    build:
+      context: ../..
+      dockerfile: services/connector-service/Dockerfile
+    container_name: memory-connector
+    restart: unless-stopped
+    ports:
+      - "3008:3008"
+    env_file:
+      - ../../services/connector-service/.env
+    environment:
+      NODE_ENV: development
+      PORT: "3008"
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/memory_platform
+      REDIS_URL: redis://redis:6379
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    volumes:
+      - ../../services/connector-service/src:/app/src:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3008/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - memory-platform-net
+
+  # ---------------------------------------------------------------------------
+  # Evaluation Service — RAG evaluation and feedback collection (port 3009)
+  # ---------------------------------------------------------------------------
+  evaluation-service:
+    build:
+      context: ../..
+      dockerfile: services/evaluation-service/Dockerfile
+    container_name: memory-evaluation
+    restart: unless-stopped
+    ports:
+      - "3009:3009"
+    env_file:
+      - ../../services/evaluation-service/.env
+    environment:
+      NODE_ENV: development
+      PORT: "3009"
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/memory_platform
+      REDIS_URL: redis://redis:6379
+      RETRIEVAL_SERVICE_URL: http://retrieval-service:3005
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    volumes:
+      - ../../services/evaluation-service/src:/app/src:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3009/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - memory-platform-net
+
+# =============================================================================
+# Named volumes — persistent data across container restarts
+# =============================================================================
+volumes:
+  postgres_data:
+    name: memory-postgres-data
+  redis_data:
+    name: memory-redis-data
+  qdrant_data:
+    name: memory-qdrant-data
+  minio_data:
+    name: memory-minio-data
+  neo4j_data:
+    name: memory-neo4j-data
+  neo4j_logs:
+    name: memory-neo4j-logs
+
+# =============================================================================
+# Shared network — all services communicate over this bridge
+# =============================================================================
+networks:
+  memory-platform-net:
+    name: memory-platform-net
+    driver: bridge

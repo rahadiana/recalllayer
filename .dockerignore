@@ -1,0 +1,66 @@
+# =============================================================================
+# Agentic Memory Platform — Docker Ignore
+# =============================================================================
+# Prevents unnecessary files from being copied into Docker build context.
+# =============================================================================
+
+# Dependencies
+**/node_modules
+.pnpm-store
+
+# Build output (services rebuilt inside Docker, packages need pre-built dist)
+services/*/dist
+**/.turbo
+
+# Tests
+**/tests
+**/*.test.ts
+**/*.spec.ts
+**/vitest.config.*
+**/__mocks__
+**/coverage
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE & OS
+.idea
+.vscode
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation (not needed at runtime)
+**/README.md
+**/CHANGELOG.md
+**/LICENSE
+docs/
+
+# CI/CD
+.github
+.gitlab-ci.yml
+Jenkinsfile
+
+# Monorepo tooling
+turbo.json
+
+# Apps (not needed for backend services)
+apps/
+
+# Connectors (built into connector-service)
+connectors/
+
+# SDKs
+sdks/
+
+# Infrastructure configs
+infra/
